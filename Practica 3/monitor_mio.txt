@@ -1,0 +1,181 @@
+#define _GNU_SOURCE
+
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <semaphore.h>
+#include <stdbool.h>
+#include <mqueue.h>
+#include <string.h>
+
+#include "pow.h"
+#include "monitor.h"
+#include "miner.h" 
+
+#define MAX_MESSAGES_MEM 6 
+#define N_BLOQUES 200
+#define MAX_MESSAGE 1024 
+#define MQ_NAME "/MyMessageQueue"
+
+void monitor(double lag, int fd); 
+void comprobador(double lag, int fd); 
+
+MemoriaCompartida memoriaCompartida; 
+
+int main (int argc, char** argv) {
+    double lag; 
+    int fd; 
+    printf ("Llego hasta aqui:"); 
+    // Compruebo argumentos 
+    if (argc != 2) {
+        fprintf(stderr, "Por favor, ingrese bien los argumentos: ./monitor <LAG> \n");
+        return EXIT_FAILURE;
+    }
+
+    lag = atoi(argv[1]); 
+
+    //Defino e inicializo semaforos 
+    if (sem_init(&memoriaCompartida.sem_empty, 1, 6) == -1) {
+        perror("sem init en sem_empty"); 
+        exit(EXIT_FAILURE); 
+    }
+    if (sem_init(&memoriaCompartida.sem_mutex, 1, 1) == -1) {
+        perror("sem_init en sem_mutex"); 
+        exit(EXIT_FAILURE); 
+    }
+    if (sem_init(&memoriaCompartida.sem_fill, 1, 0) == -1) {
+        perror("sem init en sem_fill"); 
+        exit(EXIT_FAILURE); 
+    }
+
+    printf ("Llego hasta aqui:"); 
+    
+    // Creo la memoria compartida, si existe voy a comprobador 
+    if ((fd = shm_open(SHM_NAME, O_CREAT | O_RDWR | O_EXCL, S_IRUSR | S_IWUSR ))==-1) {
+        // Si existe, se ejecuta el proceso monitor 
+        if (errno == EEXIST) {
+            monitor(lag, fd); 
+        } else {
+            perror("shm_open"); 
+            exit(EXIT_FAILURE); 
+        }
+    } else { // Comprobador 
+        comprobador(lag, fd); 
+    }
+    return EXIT_SUCCESS; 
+}
+
+void comprobador(double lag, int fd) {
+    printf ("Llego hasta aqui2:"); 
+    int nbytes=0, i, aux;
+    mqd_t mqdes; 
+    void *ptr_shm; 
+
+    // Especifico el tamaño de la memoria compartida
+    ftruncate(fd, sizeof(Message) * MAX_MESSAGES_MEM);
+    // Asigno una region de memoria virtual con MMAP 
+    ptr_shm = mmap(NULL, sizeof(Message) * MAX_MESSAGES_MEM, PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr_shm == MAP_FAILED) {
+        printf ("Error en mmap"); 
+        //perror("mmap"); 
+        exit(EXIT_FAILURE); 
+    }
+    //Abro cola de mensajes modo lectura 
+    mqdes = mq_open(MQ_NAME, O_RDONLY); 
+    if (mqdes == -1) {
+        perror("mq_open"); 
+        exit(EXIT_FAILURE); 
+    }
+    // Repito el proceso de recepcion/compribacion/escritura hasta recibir un bloque especial
+    for(i=0; i==aux; i++) {
+        i = i % 6; 
+
+        // Leer de la cola de mensajes -> por cada llamada a mq_receive, leo un bloque 
+        nbytes = mq_receive(mqdes, (char*) &memoriaCompartida.message[i], sizeof(Message), NULL);
+        if (nbytes == -1) {
+            perror("mq_receive"); 
+            mq_close(mqdes); 
+            exit(EXIT_FAILURE); 
+        }
+
+        printf("C: objetivo: %ld \n", memoriaCompartida.message[i].objetivo);
+        printf("C: solucion: %ld \n", memoriaCompartida.message[i].solucion);
+        // Compruebo si es correcto el bloque recibido, modifico la bandera de la struct 
+        sem_wait(&memoriaCompartida.sem_empty); 
+        sem_wait(&memoriaCompartida.sem_mutex); 
+        //Si he recibido el final -> establezco como el final POW_LIMIT+1
+        if (memoriaCompartida.message[i].solucion > POW_LIMIT) {
+            exit(EXIT_SUCCESS); 
+        }
+
+        if (memoriaCompartida.message[i].objetivo == pow_hash(memoriaCompartida.message[i].solucion)) {
+            memoriaCompartida.message[i].valido = true; 
+            //Lo introduzco en memoria para que lo lea monitor 
+            if (memcpy(ptr_shm, &memoriaCompartida.message[i], sizeof(Message)) == NULL) {
+                perror("memcpy"); 
+                exit(EXIT_FAILURE); 
+            }
+        } else {
+            memoriaCompartida.message[i].valido = false; 
+            aux = 1; 
+        }
+
+        sem_post(&memoriaCompartida.sem_mutex); 
+        sem_post(&memoriaCompartida.sem_fill); 
+        // Espero <LAG> milisegundos
+        usleep(lag * 1000); 
+    }
+    return; 
+}
+
+void monitor(double lag, int fd) { 
+    printf ("Llego hasta aqui:3"); 
+    struct stat shmobj_stat; //estructura para saber cuantos bytes tenemos que leer del objeto de memoria compartida 
+    //ShmStruct *shm_struct; 
+    Message *mensaje=NULL; 
+
+    // Abro la memoria compartida en modo lectura 
+    fd = shm_open(SHM_NAME, O_RDONLY, 0);
+    if (fd == -1) {
+        perror("shm_open"); 
+        exit(EXIT_FAILURE); 
+    } 
+    //fstat -> para guardar en la estructura la informacion de todos los campos ya inicializada 
+    if (fstat(fd, &shmobj_stat) == -1) {
+        perror("fstat"); 
+        exit(EXIT_FAILURE); 
+    }
+    //Extraigo el bloque (Leo)
+    mensaje = mmap(NULL, sizeof(Message) * MAX_MESSAGES_MEM, PROT_READ, MAP_SHARED, fd, 0); 
+    if (mensaje == MAP_FAILED) {
+        printf ("Error en mmap2"); 
+        //perror("mmap"); 
+        exit(EXIT_FAILURE); 
+    }
+    // Repito el ciclo extraccion y muestra hasta recibir un bloque de finalizacion
+    while(true) {
+        sem_wait(&memoriaCompartida.sem_fill); 
+        sem_wait(&memoriaCompartida.sem_mutex); 
+        
+        //Muestro el bloque por pantalla 
+        if (mensaje->valido== 1) {
+            printf("Solution accepted: %08ld --> %08ld\n", mensaje->objetivo, mensaje->solucion); 
+        } else {
+            printf("Solution rejected: %08ld !-> %08ld\n", mensaje->objetivo, mensaje->solucion); 
+        }
+        if (mensaje->solucion > POW_LIMIT) {
+            exit(EXIT_SUCCESS); 
+        }
+        sem_post(&memoriaCompartida.sem_mutex); 
+        sem_post(&memoriaCompartida.sem_empty); 
+        // Espero <LAG> milisegundos
+        usleep(lag * 1000); 
+    }
+    return; 
+}
+

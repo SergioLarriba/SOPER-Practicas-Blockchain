@@ -1,0 +1,116 @@
+- Es un mecanismo de comunicacion entre procesos 
+- Se comparte una region de la memoria (objetos de memoria compartida) 
+- La respresentacion de estos objetos esta en /dev/shm, y cuando apagamos o reiniciamos estos objetos se pierden 
+- Hay que proteger esta zona de memoria mediante una tecnica de sincronizacion 
+
+gcc programa.c -o programa -lrt 
+para ver el objeto de memoria compartida -> cd /dev/shm/ 
+se puede borrar con rm nombre
+
+or lo general, cuando se trabaja con memoria compartida solo es necesario llamar a la
+funci ́on ftruncate una vez, desde el proceso que crea el segmento de memoria.
+
+Para obtener informaci ́on acerca de un fichero o segmento de memoria compartida se usa la
+funci ́on fstat, que recibe el descriptor del fichero del que se desea obtener informaci ́on, fd, y la
+informaci ́on se almacena en la estructura apuntada por el segundo argumento, buf. El campo
+m ́as interesante de esta estructura es st_size, que indica el tama ̃no del fichero o segmento de
+memoria.
+
+/* Creo un objeto de memoria compartida /myMemoryObj, el cual lo puedo encontrar en /dev/shm, y para compilar el programa tengo que poner la flag -lrt */
+
+#define SMOBJ_NAME  "/myMemoryObj"
+#define SMOBJ_SIZE 200
+
+int main() {
+    int fd; //file descriptor 
+
+    //creo el objeto de memoria compartida -> cuando creo pongo 00600 en los permisos 
+    fd = shm_open(SMOBJ_NAME, O_CREAT | O_RDWR, 00600); //devuelve un file descriptor valido 
+    if (fd == -1) {
+        printf("error, shared memory could not be created\n"); 
+        exit(1); 
+    }
+    //doy un tamaño a la memoria compartida 
+    if (ftruncate(fd, SMOBJ_SIZE) == -1) {
+        printf("error, shared memory could not be resized\n"); 
+        exit(1);
+    } 
+    close(fd); 
+    return 0; 
+}
+
+para ver el contenido del objeto de memoria compartida -> cat nombre (en este caso) -> cat myMemoryObj
+
+/* Escribo en ese objeto de memoria ya creado por otro programa */ 
+int main() {
+    int fd; //file descriptor 
+    char buf[] = "Hola soy el proceso escritor \n"; 
+    char *ptr; 
+
+    // abro la memoria en modo escritura 
+    // una vez creado, escribo en el, pongo 0 en los permisos por que ya lo he creado 
+    fd = shm_open(SMOBJ_NAME, O_RDWR, 0); //devuelve un file descriptor valido 
+    if (fd == -1) {
+        printf("error, shared memory could not be created\n"); 
+        exit(1); 
+    }
+
+    //el tercer argumento SIEMPRE va a ser MAP_SHARED, mapeamos la memoria en nuestro programa
+    ptr = mmap(0, sizeof(buf), PROT_WRITE, MAP_SHARED, fd, 0); //el ultimo argumento es 0 porque empiezo a mapear desde el principio del objeto de memoria compartida 
+    if (ptr == MAP_FAILED) {
+        printf ("error al mapear la memoria"); 
+        exit(1); 
+    }
+
+    // escribo algo en la memoria compartida 
+    memcpy(ptr, buf, sizeof(buf)); 
+
+
+    close(fd); 
+    return 0; 
+}
+
+/* Programa de lectura del objeto de memoria compartida */ 
+int main() {
+    int fd; 
+    char *ptr; 
+    struct stat shmobj_stat; //estructura para saber cuantos bytes tenemos que leer del objeto de memoria compartida 
+
+    //abro el file descriptor 
+    fd = shm_open(SMOBJ_NAME, O_RDONLY, 0); //devuelve un file descriptor valido 
+    if (fd == -1) {
+        printf("error, shared memory could not be created\n"); 
+        exit(1); 
+    }
+
+    //fstat -> para guardar en la estructura la informacion de todos los campos ya inicializada 
+    if (fstat(fd, &shmobj_st) == -1) {
+        printf("error, fstat"); 
+        exit(1); 
+    }
+
+    //mapeo el objeto de memoria -> me devuelve lo que he leido en el objeto de memoria compartida 
+    ptr = mmap(NULL, shmobj_stat.st_size, PROT_READ, MAP_SHARED, fd, 0); 
+    if (ptr == MAP_FAILED) {
+        printf ("error al mapear la memoria"); 
+        exit(1); 
+    }
+
+    printf("%s \n", ptr); //devuelve lo que he leido del objeto de memoria compartida 
+    close(fd); 
+
+    return 0; 
+}
+
+
+/**************************************/
+MAPEO DE MEMORIA -> mmap(): crea un mapeo de memoria en el espacio de direcciones virtual del proceso que la llama 
+
+- Visibilidad: 
+    - Privado: MAP_PRIVATE -> todos los cambios que haga el proceso en la memoria, no podran ser vistas por otro proceso 
+    - Publico: MAP_SHARED -> todos los cambios que haga el proceso en la memoria, podran ser vistas por otro proceso 
+    
+- Usos: 
+    - Alternativa a read() y write()
+    - Comunicacion de procesos IPC 
+

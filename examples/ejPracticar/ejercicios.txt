@@ -1,0 +1,15 @@
+Ej 2
+	a) grep -w 'molino' 'don quijote.txt' > 'aventuras.txt' (-w es para buscar palabras)
+	b) find . -maxdepth 1 -type f | wc -l (un pipeline es usar "|", mandar la salida de un comando a otro)
+	    find . -maxdepth 1 -type f -> te enseña los ficheros que hay en el directorio
+	    wc -l -> te cuenta las lineas 
+	c) cat 'lista de la compra Pepe.txt' 'lista de la compra Elena.txt' 2> /dev/null | sort -u | wc -l > 'num compra.txt'  
+	    cat source1.txt source2.txt > destination.txt -> concatenar archivos con cat y lo guardo en destination.txt 
+	    2> /dev/null -> desviar el error 
+	    sort -u -> encuentro las lineas unicas 
+	    wc -l -> cuanto las lineas unicas 
+	    > 'num compra.txt' -> lo redirijo a 'num compras.txt' el resultado, y lo que habia lo borro 
+	    
+Para debuguear, usar printf con \n, o fflush (imprimir en un fichero o terminal) 
+
+

@@ -1,0 +1,6 @@
+El SO, tiene para ese semaforo un valor, si el valor es 0, se va a quedar parado
+Si tiene 1(por ejemplo), lo decrementa (lo pone a 0) y continua con el proceso -> lo hace semwait (es bloqueante)
+sempos -> aumenta el semaforo ++
+La funcion semwait hay que protegerla -> volver a llamar a semwait si nos han sacado de la funcion por culpa de una señal (semwait signal safe (para buscar ayuda))
+sigsuspend -> copiar las mismas lineas de codigo q nos dan, por que 
+    cuando llamamos a sigsuspend nos va a detener el proceso

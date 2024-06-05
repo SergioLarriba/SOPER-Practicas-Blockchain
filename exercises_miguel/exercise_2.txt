@@ -1,0 +1,5 @@
+A) grep -w 'molino' 'don quijote.txt'
+
+B) ls -l | wc -l
+
+C) cat 'lista de la compra Pepe.txt' 'lista de la compra Elena.txt' 2> /dev/null | sort -u | wc -l > 'num compra.txt'

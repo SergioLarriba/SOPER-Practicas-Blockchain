@@ -1,0 +1,2 @@
+a) kill -l
+b) SIGKILL -> 9, SIGSTOP -> 19

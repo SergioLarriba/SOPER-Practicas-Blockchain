@@ -1,0 +1,41 @@
+- Mecanismo de comunicacion entre procesos 
+- Un proceso envia un mensaje y otro lo leera, cuando lo lea desaparece de la cola de mensajes 
+- Los mensajes tienen asociadas una prioridad -> empieza a leer los mensajes de mayor prioridad 
+
+Funciones: 
+    mqd_t mq_open() -> crea o abre una cola 
+    int mq_send() -> envia un mensaje a la cola de mensajes 
+    ssize_t mq_receive() -> recibe un mensaje de esa cola 
+    int mq_close() -> cierra una cola ya existente 
+    mq_unlink() -> borra el nombre de la cola 
+
+/*Crea una cola de mensajes y envia un mensaje a esa cola*/
+mqd_t mqdescriptor; 
+char mensaje[80] = "Hola como vas"; 
+
+mqdescriptor = mq_open("/myMsgQueue", 0_WRONLY | O_CREAT, 0664, NULL); 
+if (mqdescriptor == -1) ERROR 
+
+//Envio mensaje 
+mq_send(mqdescriptor, mensaje, strlen(mensaje)+1, 0); 
+//Cierro la cola 
+mq_close(mqdescriptor); 
+
+cd /proc/sys/fs/msqueue -> directorio para los atributos de una message queue 
+cat msgsize_default -> Ej:8122 Bytes -> tamaño de mensaje maximo que puede enviar mi prgrama, el programa receptor debe de tener un buffer de al menos 8192 B para poder leer 
+
+cd /dev/mqueue/ -> ahi estan las colas de mensajes 
+
+/* Recibir mensaje de cola de mensajes */ 
+char buf[8192]; 
+int nbytesleidos; 
+//abrir cola de mensajes, ya existe 
+mqdescriptor = mq_open("/myMsgQueue", O_RDONLY); al abrir una existente solo necesitamos el nombre de la cola y el modo de apertura 
+
+//Recibo el mensaje 
+nbytesleidos = mq_receive(mqdescriptor, buf, 8192, NULL); 
+
+//Cierro la cola 
+mq_close(mqdescriptor); 
+
+cuando se lee un mensaje de la cola, se elimina ese mensaje 

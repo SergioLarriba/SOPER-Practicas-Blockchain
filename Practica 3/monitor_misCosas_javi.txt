@@ -1,0 +1,206 @@
+#include <fcntl.h>
+#include <mqueue.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <semaphore.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <errno.h>
+
+#include "monitor.h"
+#include "miner.h"
+#define MQ_NAME "/MyMessageQueue"
+#define BUF_SIZE 150
+#define SHM_NAME "/shm_file"
+
+void comprobador(int tiempo,int fd);
+int monitor(int tiempo, int fd);
+MemoriaCompartida memoria;
+
+
+int llamaPow(MemoriaCompartida m){
+
+  if(pow_hash(m.message->solucion)==m.message->objetivo){
+    printf("POW CORRECTO 3\n");
+    return 1;
+  }
+  printf("POW INCORRECTO\n");
+  return -1;
+}
+
+int main(int argc,char *argv[]){
+
+  int tiempo=0,fd_shm;
+
+
+  if(argc<2 || !argv){
+      return -1;
+  }
+
+  tiempo=atoi(argv[1]);
+  
+
+  /*ABRO LOS SEMÁFOROS*/
+  if(sem_init(&memoria.sem_empty,1,6)==-1){
+      perror("ERROR CREANDO SEM_EMPTY");
+      exit(1);
+  }
+  if(sem_init(&memoria.sem_fill,1,0)==-1){
+      perror("ERROR CREANDO SEM_FILL");
+      exit(1);
+  }
+  if(sem_init(&memoria.sem_mutex,1,1)==-1){
+      perror("ERROR CREANDO SEM_MUTEX");
+      exit(1);
+  }
+
+  int fill;
+  sem_getvalue(&memoria.sem_fill,&fill);
+  printf("Sem fill inicio valor : %i\n",fill);
+  sem_getvalue(&memoria.sem_empty,&fill);
+  printf("Sem fill empty valor : %i\n",fill);
+  sem_getvalue(&memoria.sem_mutex,&fill);
+  printf("Sem mutex inicio valor : %i\n",fill);
+
+
+  if((fd_shm = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR))==-1){
+    /*monitor*/
+    if(errno==EEXIST){
+      monitor(tiempo,fd_shm);
+    }
+    else{
+      perror("ABRIENDO MEMORIA");
+      exit(1);
+    }
+  }
+  /*comprobador*/
+  else{
+    comprobador(tiempo,fd_shm);
+  }
+
+
+  return 0;
+
+
+}
+
+
+void comprobador(int tiempo,int fd_shm){
+  printf("COMPROBADOR\n");
+  fflush(stdout);
+  int i=0,aux=0;
+  void * shm_ptr;
+  mqd_t mqdes;
+  MemoriaCompartida men[7];
+
+  
+
+  ftruncate(fd_shm,6*sizeof(Message));
+  shm_ptr = mmap(NULL, 6*sizeof(Message), PROT_WRITE, MAP_SHARED, fd_shm, 0);
+  mqdes=mq_open(MQ_NAME,O_RDONLY);
+
+  for(i=0;aux==0;i++){
+    i=i%6;
+    if(mq_receive(mqdes,(char*)&men[i],sizeof(Message),NULL)==-1){
+      perror("ERROR RECIBIENDO MENSAJE");
+      exit(1);
+    }
+
+    printf("C: objetivo: %ld \n",men->message->objetivo);
+    printf("C: solucion: %ld \n",men->message->solucion);
+
+
+
+    sem_wait(&memoria.sem_empty);
+    sem_wait(&memoria.sem_mutex);
+    /*Si solucion es POW_LIMIT+1 ES QUE ES EL FINAL*/
+    if(memoria.message[i].solucion>POW_LIMIT){
+      printf("FIN MENSAJE > POW\n");
+      fflush(stdout);
+      exit(1);
+    }
+
+    if(llamaPow(men[i])==1){
+      printf("OK\n");
+      aux=1;
+    }
+
+    memoria.message[i]=*men[i].message;
+    memoria.message[i].valido=true;
+    if(memcpy(shm_ptr,&memoria.message[i],sizeof(Message))==NULL){
+      perror("ESCRIBIENDO");
+      exit(1);
+    }
+    else{
+      memoria.message[i].valido=false;
+    }
+    /*escribo el mensaje en memoria*/
+
+    sem_post(&memoria.sem_mutex);
+    sem_post(&memoria.sem_fill);
+    int fill;
+    sem_getvalue(&memoria.sem_fill,&fill);
+    printf("Sem fill despues levantar valor : %i\n",fill);
+
+
+    usleep(1000*tiempo);
+  }
+  return;
+}
+
+
+int monitor(int tiempo, int fd_shm){
+  printf("MONITOR\n");
+  fflush(stdout);
+  struct stat sstat;
+  
+  Message *m;
+  fd_shm=shm_open(SHM_NAME,O_RDONLY,0);
+  if(fd_shm==-1){
+    perror("ABRIENDO MEM MONITOR");
+    exit(1);
+  }
+
+  if(fstat(fd_shm,&sstat)==-1){
+    perror("STAT");
+    exit(1);
+  }
+
+  /*en size meter tamaño*/
+  m=mmap(NULL,6*sizeof(Message), PROT_READ, MAP_SHARED, fd_shm, 0);
+  if(m==MAP_FAILED){
+    perror("MAP FALLA");
+    exit(1);
+  }
+
+  int fill;
+
+  while (1){
+  
+  int fill;
+  sem_getvalue(&memoria.sem_fill,&fill);
+  printf("Sem fill valor MONITOR : %i\n",fill);
+    sem_wait(&memoria.sem_fill);
+    sem_wait(&memoria.sem_mutex);
+    printf("do while\n");
+    if(m->valido==true){
+      printf("Solution accepted: %08ld --> %08ld\n",m->objetivo,m->solucion);
+    }
+    else{
+      printf("Solution rejected: %08ld --> %08ld\n",m->objetivo,m->solucion);
+    }
+
+    if(m->solucion>POW_LIMIT){
+      exit(1);
+    }
+    usleep(1000*tiempo);
+
+
+    sem_post(&memoria.sem_mutex);
+    sem_post(&memoria.sem_empty);
+  }
+  return 0;
+}

@@ -1,0 +1,46 @@
+1) 
+    a) Este código en C se encarga de crear o abrir un objeto de memoria compartida utilizando la función shm_open(). Primero intenta crear un objeto de memoria compartida utilizando la bandera O_EXCL, que indica que se debe crear un nuevo objeto y si ya existe, se debe fallar. Si esta operación falla con un error de EEXIST, significa que el objeto ya existe, por lo que intenta abrirlo con la bandera O_RDWR para permitir lectura y escritura. Si la operación de apertura también falla, el programa muestra un mensaje de error y termina. Si la operación de creación o apertura es exitosa, se muestra un mensaje indicando el resultado.
+
+    El uso de este código es importante para permitir que varios procesos compartan el mismo objeto de memoria compartida, lo que les permite comunicarse y compartir datos entre ellos.
+
+    b) Una posible solución para forzar la inicialización del objeto de memoria compartida en la próxima ejecución del programa es eliminar el objeto de memoria compartida existente utilizando la función shm_unlink() antes de intentar crearlo nuevamente. Por ejemplo, se puede agregar el siguiente código al inicio del programa:
+
+    int ret = shm_unlink(SHM_NAME);
+    if (ret == -1 && errno != ENOENT) {
+        perror("Error removing shared memory segment");
+        exit(EXIT_FAILURE);
+    }
+
+    Este código intenta eliminar el objeto de memoria compartida y, si tiene éxito, el objeto no existirá en la próxima ejecución del programa, lo que forzará su creación. Si el objeto no existe, la función shm_unlink() fallará con el error ENOENT, que se ignora.
+
+2) 
+    a) Para obtener el tamaño del archivo abierto, se puede utilizar la función fstat() que devuelve información sobre un archivo, incluyendo su tamaño en bytes. Se puede agregar el siguiente código después de la línea 24 para obtener el tamaño del archivo:
+
+    if (fstat(fd, &statbuf) == -1) {
+        perror("fstat");
+        exit(EXIT_FAILURE);
+    }
+    printf("File size: %ld bytes\n", statbuf.st_size);
+
+    b) Para truncar el tamaño del archivo a 5 bytes, se puede utilizar la función ftruncate() que cambia el tamaño del archivo a un tamaño específico en bytes. Se puede agregar el siguiente código después de la línea 27 para truncar el archivo a 5 bytes:
+
+    if (ftruncate(fd, 5) == -1) {
+        perror("ftruncate");
+        exit(EXIT_FAILURE);
+    }
+
+    El archivo resultante contendrá los primeros 5 bytes del mensaje "Test message", que es "Test ". Los bytes restantes serán eliminados ya que se ha truncado el archivo.
+
+3) 
+    a) Cuando se ejecuta varias veces el programa anterior, el programa crea un archivo llamado "test_file.dat" si aún no existe, o abre el archivo existente si ya se creó anteriormente. Luego, el programa mapea el archivo en memoria, incrementa el valor almacenado en la memoria compartida y lo muestra en pantalla. Si el archivo ya existía, se lee el valor previo y se incrementa, y si es la primera vez que se ejecuta, se inicializa a cero. Por lo tanto, cada vez que se ejecuta el programa, se incrementa en uno el valor almacenado en el archivo y se muestra en pantalla.
+
+    b) No se puede leer el contenido del archivo "test_file.dat" con un editor de texto porque la memoria compartida se mapea a la memoria del proceso, pero no al sistema de archivos. La función mmap() permite al programa trabajar con una porción del archivo en memoria, pero no cambia el archivo original en el sistema de archivos. Por lo tanto, el contenido del archivo en disco sigue siendo el mismo y no se puede leer con un editor de texto.
+
+4) 
+    a) No tendría mucho sentido incluir shm_unlink en el lector, ya que esta función se utiliza para eliminar el objeto de memoria compartida después de que se hayan completado todas las operaciones con él. En este caso, el lector no debería eliminar el objeto de memoria compartida, ya que aún se utiliza en el proceso del escritor.
+
+    b) No tendría sentido incluir ftruncate en el lector, ya que esta función se utiliza para cambiar el tamaño del objeto de memoria compartida. El lector no debería modificar el objeto de memoria compartida, sino simplemente leer de él.
+
+    c) shm_open se utiliza para crear o abrir un objeto de memoria compartida, mientras que mmap se utiliza para mapear el objeto de memoria compartida en la memoria del proceso. shm_open se encarga de la creación y apertura del objeto de memoria compartida, mientras que mmap se encarga de su asignación a la memoria del proceso. Ambas funciones son necesarias para utilizar la memoria compartida, y son complementarias en su funcionalidad.
+
+    d) No se podría usar la memoria compartida sin enlazarla con mmap, ya que mmap es la función que se utiliza para asignar la memoria compartida en la memoria del proceso. Si no se llama a mmap, no se tendría acceso a la memoria compartida.

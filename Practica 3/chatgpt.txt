@@ -1,0 +1,55 @@
+Proceso Comprobador:
+
+scss
+
+inicializar_memoria_compartida()
+sem_empty = 6
+sem_full = 0
+sem_mutex = 1
+
+while true do
+    bloque = recibir_bloque_de_la_cola_de_mensajes()
+    comprobar_bloque(bloque)
+    agregar_bandera_al_bloque(bloque)
+    down(sem_empty)
+    down(sem_mutex)
+    agregar_bloque_al_buffer_circular(bloque)
+    up(sem_mutex)
+    up(sem_full)
+    esperar_LAG_milisegundos()
+
+    if bloque_especial_recibido(bloque) then
+        down(sem_mutex)
+        agregar_bloque_al_buffer_circular(bloque)
+        up(sem_mutex)
+        up(sem_full)
+        liberar_recursos()
+        terminar()
+    end if
+end while
+
+Proceso Monitor:
+
+scss
+
+abrir_memoria_compartida()
+sem_empty = 6
+sem_full = 0
+sem_mutex = 1
+
+while true do
+    down(sem_full)
+    down(sem_mutex)
+    bloque = extraer_bloque_del_buffer_circular()
+    up(sem_mutex)
+    up(sem_empty)
+    mostrar_bloque_por_pantalla(bloque)
+    esperar_LAG_milisegundos()
+
+    if bloque_especial_recibido(bloque) then
+        liberar_recursos()
+        terminar()
+    end if
+end while
+
+

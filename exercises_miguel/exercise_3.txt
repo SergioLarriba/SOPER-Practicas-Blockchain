@@ -1,0 +1,5 @@
+A) Bad addres
+
+B) Permission denied
+
+C) Guardaríamos el valor de errno en otra variable

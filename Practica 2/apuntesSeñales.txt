@@ -1,0 +1,52 @@
+- Para ver el identificador de proceso de mi programa en ejecucion: ps u
+- Que es una señal?
+    notificacion que se va a enviar a un proceso determinado 
+- Como se puede enviar una señal? 
+    kill -nombreSeñal -pid 
+- Como tratar una señal? 
+    void MySignalHandler(int sig) { //esta funcion recibe un entero, que es el numero de una señal
+        printf ("Signal number is %d \n", sig); 
+    }
+    int main ()
+    {
+        signal(SIGIO, &MySignalHandler); //esto lo hago para recibir la señal SIGIO (por ejemplo), cuando reciba esta señal, me ire a una funcion llamada MySignalHandler 
+        while(1)
+        {
+            printf ("ZZZZZZZZ\n"); 
+            sleep(2); 
+        }
+        return 0; 
+    }
+- cual es el comportamiento por defecto (cuando la señal no es atendida)?
+    El programa se detiene 
+- Como ignorar una señal? 
+    llamamos a la funcion signal(SIGALARM, SIG_IGN); //aqui estamos ignorando la señal SIGALARM poniendo en el segundo argumento SIG_IGN 
+
+Las señales SIGKILL, SIGSTOP  no se pueden atrapar, bloquear, o ignorar 
+
+SIGACTION: se utiliza para establecer un manejador de señales para una señal determinada
+    int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+        signum: el número de la señal que se está manejando.
+        act: un puntero a una estructura sigaction que describe la acción a tomar cuando se recibe la señal especificada. Si se establece en NULL, la señal se restaura a su comportamiento predeterminado.
+        oldact: un puntero a una estructura sigaction que se usa para devolver la acción anterior para la señal especificada.
+
+struct sigaction {
+    void (*sa_handler)(int);
+    void (*sa_sigaction)(int, siginfo_t *, void *);
+    sigset_t sa_mask;
+    int sa_flags;
+    void (*sa_restorer)(void);
+};
+    sa_handler: es un puntero a la función que se invocará cuando se reciba la señal especificada. Si se establece en SIG_IGN, se ignora la señal. Si se establece en SIG_DFL, se restaura el comportamiento predeterminado de la señal.
+    sa_sigaction: es un puntero a una función que se invoca cuando se recibe una señal y se requiere una información adicional sobre la señal en cuestión. Este campo se utiliza si sa_flags se establece en SA_SIGINFO.
+    sa_mask: es un conjunto de señales adicionales que se bloquearán durante la ejecución del manejador de señales.
+    sa_flags: proporciona opciones adicionales para el comportamiento del manejador de señales. Por ejemplo, SA_RESTART se utiliza para indicar que se debe reiniciar la llamada del sistema que fue interrumpida por la señal.
+    sa_restorer: es un puntero a una función que se invoca después de que se ha manejado
+
+Examen de practicas: 
+El manejador no se ejecuta cuando llamamos a sigaction 
+Asignar el manejador a la estructura y no llamas a sigaction -> no se establece bien el manejador 
+definimos una mascara y no llamamos a sigprogmask...
+saberse muy bien sigprogmask y lo de las mascaras en general 
+
+No usar getppid, hacer q el padre tenga una variable pid_padre=getpid(), y despues de hacer el fork el hijo heredará esa variable, esto es para prevenir si el padre muere, el hijo sigue teniendo el pid 

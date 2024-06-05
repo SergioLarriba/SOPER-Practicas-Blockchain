@@ -1,0 +1,3 @@
+A) El programa se mantiene ejecutandose consumiendo recursos del CPU.
+
+B) El programa deja de ocupar recursos del CPU durante el tiempo seleccionado.
